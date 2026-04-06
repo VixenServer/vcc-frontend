@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — VCC Social Toolkit</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>
+body { display:flex; min-height:100vh; }
+body.not-logged-in { display:block; }
+.sidebar {
+  width:220px; min-height:100vh;
+  background:var(--darker);
+  border-right:1px solid var(--border);
+  display:flex; flex-direction:column;
+  position:fixed; top:0; left:0; bottom:0; z-index:50;
+}
+.sidebar-logo { padding:20px 18px; border-bottom:1px solid var(--border); }
+.sidebar-logo .s-name { font-size:15px; font-weight:700; letter-spacing:2px; color:var(--neon); text-transform:uppercase; }
+.sidebar-logo .s-sub { font-family:var(--mono); font-size:9px; color:var(--muted); letter-spacing:2px; margin-top:2px; }
+.sidebar-nav { flex:1; padding:10px 0; }
+.s-section { font-family:var(--mono); font-size:8px; color:var(--muted); letter-spacing:3px; padding:14px 18px 4px; text-transform:uppercase; }
+.s-nav-item {
+  display:block; width:100%; text-align:left;
+  padding:11px 18px; font-size:12px; font-weight:600;
+  letter-spacing:1px; text-transform:uppercase;
+  color:var(--muted); background:none; border:none;
+  border-left:2px solid transparent; cursor:pointer;
+  transition:all 0.2s;
+}
+.s-nav-item:hover,.s-nav-item.active { color:var(--neon); background:rgba(0,255,157,0.05); border-left-color:var(--neon); }
+.sidebar-footer { padding:16px 18px; border-top:1px solid var(--border); }
+.main { margin-left:220px; flex:1; padding:28px; min-width:0; }
+.not-logged-in .main { margin-left:0 !important; display:flex; justify-content:center; align-items:center; min-height:100vh; padding:0; width:100vw; }
+.not-logged-in #admin-login { margin:0; display:flex; justify-content:center; align-items:center; width:100%; }
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+
+/* Modal */
+.modal-bg { display:none; position:fixed; inset:0; background:rgba(3,6,8,0.94); z-index:200; align-items:flex-start; justify-content:center; padding:30px 20px; overflow-y:auto; }
+.modal-bg.open { display:flex; }
+.modal-box { background:var(--panel); border:1px solid var(--border); padding:28px; width:100%; max-width:540px; position:relative; margin:auto; }
+.modal-box::before { content:''; position:absolute; top:0;left:0;right:0;height:2px; background:linear-gradient(90deg,transparent,var(--neon),transparent); }
+.modal-close-btn { position:absolute; top:14px; right:16px; background:none; border:none; color:var(--muted); font-size:22px; cursor:pointer; }
+.modal-close-btn:hover { color:var(--red); }
+.modal-title { font-family:var(--mono); font-size:10px; color:var(--neon); letter-spacing:4px; text-transform:uppercase; margin-bottom:20px; }
+
+/* Service filter bar */
+.plat-filter { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.pf-btn { background:var(--panel); border:1px solid var(--border); color:var(--muted); padding:5px 12px; font-family:var(--sans); font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; cursor:pointer; transition:all 0.2s; }
+.pf-btn:hover,.pf-btn.active { color:var(--neon); border-color:var(--neon); background:rgba(0,255,157,0.06); }
+
+/* Inline price edit */
+.price-edit { font-family:var(--mono); font-size:13px; color:var(--neon); background:transparent; border:none; border-bottom:1px dashed var(--border); width:72px; outline:none; padding:2px 4px; }
+.price-edit:focus { border-bottom-color:var(--neon); background:rgba(0,255,157,0.05); }
+
+/* Toggle switch */
+.toggle { position:relative; display:inline-block; width:36px; height:20px; }
+.toggle input { opacity:0; width:0; height:0; }
+.toggle-slider { position:absolute; inset:0; background:rgba(255,68,102,0.3); border:1px solid var(--red); cursor:pointer; transition:.3s; }
+.toggle-slider:before { content:''; position:absolute; height:12px; width:12px; left:3px; bottom:3px; background:var(--red); transition:.3s; }
+input:checked + .toggle-slider { background:rgba(0,255,157,0.2); border-color:var(--neon); }
+input:checked + .toggle-slider:before { transform:translateX(16px); background:var(--neon); }
+</style>
+</head>
+<body>
+
+<div class="sidebar" id="admin-sidebar" style="display:none;">
+  <div class="sidebar-logo">
+    <div class="s-name">VCC Admin</div>
+    <div class="s-sub">// Control Panel</div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="s-section">Overview</div>
+    <button class="s-nav-item active" onclick="showTab('dashboard',this)">Dashboard</button>
+    <div class="s-section">Management</div>
+    <button class="s-nav-item" onclick="showTab('deposits',this)">Deposits <span id="dep-badge" style="color:var(--red);font-family:var(--mono);font-size:10px;margin-left:4px;"></span></button>
+    <button class="s-nav-item" onclick="showTab('users',this)">Users</button>
+    <button class="s-nav-item" onclick="showTab('orders',this)">Orders</button>
+    <button class="s-nav-item" onclick="showTab('services',this)">Services</button>
+    <div class="s-section">Config</div>
+    <button class="s-nav-item" onclick="showTab('settings',this)">Settings</button>
+    <button class="s-nav-item" onclick="showTab('security',this)">Change Password</button>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="btn-logout" onclick="adminLogout()" style="width:100%">Logout</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ── LOGIN ── -->
+  <div id="admin-login">
+    <div class="card" style="width:360px;">
+      <div class="card-header">// ADMIN LOGIN</div>
+      <div id="login-err"></div>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="admin-user" placeholder="Enter username" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="admin-pass" placeholder="Enter password" />
+      </div>
+      <button class="btn btn-neon btn-full" onclick="adminLogin()">Access Panel →</button>
+    </div>
+  </div>
+
+  <!-- ── PANEL ── -->
+  <div id="admin-panel" style="display:none;">
+
+    <!-- DASHBOARD -->
+    <div class="tab-content active" id="tab-dashboard">
+      <div class="page-title">&gt; DASHBOARD</div>
+      <div class="page-heading">Overview</div>
+      <div class="stats-grid">
+        <div class="stat-box"><span class="stat-num" id="s-users">—</span><span class="stat-label">Total Users</span></div>
+        <div class="stat-box"><span class="stat-num" id="s-orders">—</span><span class="stat-label">Total Orders</span></div>
+        <div class="stat-box"><span class="stat-num text-yellow" id="s-pending-o">—</span><span class="stat-label">Pending Orders</span></div>
+        <div class="stat-box"><span class="stat-num text-neon" id="s-revenue">৳0</span><span class="stat-label">Total Revenue</span></div>
+        <div class="stat-box"><span class="stat-num text-yellow" id="s-pending-d">—</span><span class="stat-label">Pending Deposits</span></div>
+      </div>
+      <div class="card">
+        <div class="card-header">// RECENT ORDERS</div>
+        <div id="dash-orders"><div class="text-muted mono" style="font-size:12px;padding:16px">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- DEPOSITS -->
+    <div class="tab-content" id="tab-deposits">
+      <div class="page-title">&gt; DEPOSITS</div>
+      <div class="page-heading">Deposit Requests</div>
+      <div id="deposits-wrap"><div class="text-muted mono" style="font-size:12px">Loading...</div></div>
+    </div>
+
+    <!-- USERS -->
+    <div class="tab-content" id="tab-users">
+      <div class="page-title">&gt; USERS</div>
+      <div class="page-heading">All Users</div>
+      <div id="users-wrap"><div class="text-muted mono" style="font-size:12px">Loading...</div></div>
+    </div>
+
+    <!-- ORDERS -->
+    <div class="tab-content" id="tab-orders">
+      <div class="page-title">&gt; ORDERS</div>
+      <div class="page-heading">All Orders</div>
+      <div id="orders-wrap"><div class="text-muted mono" style="font-size:12px">Loading...</div></div>
+    </div>
+
+    <!-- SERVICES -->
+    <div class="tab-content" id="tab-services">
+      <div class="page-title">&gt; SERVICE MANAGEMENT</div>
+      <div class="page-heading">Services & Pricing</div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+        <div class="plat-filter" id="plat-filter">
+          <button class="pf-btn active" onclick="filterPlat('all',this)">All</button>
+          <button class="pf-btn" onclick="filterPlat('Facebook',this)">Facebook</button>
+          <button class="pf-btn" onclick="filterPlat('Instagram',this)">Instagram</button>
+          <button class="pf-btn" onclick="filterPlat('YouTube',this)">YouTube</button>
+          <button class="pf-btn" onclick="filterPlat('TikTok',this)">TikTok</button>
+          <button class="pf-btn" onclick="filterPlat('Telegram',this)">Telegram</button>
+          <button class="pf-btn" onclick="filterPlat('Twitter',this)">Twitter</button>
+        </div>
+        <button class="btn btn-neon" onclick="openAddSrv()">+ Add Service</button>
+      </div>
+
+      <div class="alert alert-info" style="font-size:12px;margin-bottom:14px;">
+        Price column এ directly click করে edit করা যাবে। Save বাটন চাপো change save করতে।
+      </div>
+
+      <div id="services-wrap"><div class="text-muted mono" style="font-size:12px">Loading...</div></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="tab-content" id="tab-settings">
+      <div class="page-title">&gt; SETTINGS</div>
+      <div class="page-heading">Panel Configuration</div>
+      <div class="card">
+        <div class="card-header">// GENERAL</div>
+        <div class="grid-2">
+          <div class="form-group"><label>Site Name</label><input type="text" id="cfg-name" /></div>
+          <div class="form-group"><label>Tagline</label><input type="text" id="cfg-tag" /></div>
+          <div class="form-group"><label>Min Deposit (৳)</label><input type="number" id="cfg-min" /></div>
+          <div class="form-group"><label>Signup Bonus (৳)</label><input type="number" id="cfg-bonus" /></div>
+        </div>
+        <div class="card-header" style="margin-top:8px;">// PAYMENT NUMBERS</div>
+        <div class="grid-2">
+          <div class="form-group"><label>bKash Number</label><input type="text" id="cfg-bkash" placeholder="01XXXXXXXXX" /></div>
+          <div class="form-group"><label>Nagad Number</label><input type="text" id="cfg-nagad" placeholder="01XXXXXXXXX" /></div>
+        </div>
+        <div class="card-header" style="margin-top:8px;">// SMM API</div>
+        <div class="form-group">
+          <label>smmfollowom.com API Key</label>
+          <input type="password" id="cfg-apikey" placeholder="নতুন key দিলে update হবে, blank রাখলে change হবে না" autocomplete="off" />
+          <div id="cfg-apikey-status" style="font-size:11px;margin-top:5px;"></div>
+        </div>
+        <div id="settings-msg"></div>
+        <button class="btn btn-neon" onclick="saveSettings()">Save All Settings →</button>
+      </div>
+    </div>
+
+    <!-- SECURITY / CHANGE PASSWORD -->
+    <div class="tab-content" id="tab-security">
+      <div class="page-title">&gt; SECURITY</div>
+      <div class="page-heading">Change Admin Password</div>
+      <div class="card" style="max-width:440px;">
+        <div class="card-header">// NEW ADMIN PASSWORD</div>
+        <div class="alert alert-warn" style="margin-bottom:16px;font-size:12px;">
+          Password change করার পর নতুন password দিয়ে login করতে হবে।
+        </div>
+        <div id="sec-msg"></div>
+        <div class="form-group">
+          <label>New Password</label>
+          <input type="password" id="sec-newpw" placeholder="Min 6 characters" autocomplete="new-password" />
+        </div>
+        <div class="form-group">
+          <label>Confirm New Password</label>
+          <input type="password" id="sec-confirmpw" placeholder="Repeat new password" autocomplete="new-password" />
+        </div>
+        <button class="btn btn-neon btn-full" onclick="adminChangePw()">Update Admin Password →</button>
+      </div>
+    </div>
+
+  </div><!-- /admin-panel -->
+</div><!-- /main -->
+
+<!-- ── ADD/EDIT SERVICE MODAL ── -->
+<div class="modal-bg" id="srv-modal">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="closeSrvModal()">×</button>
+    <div class="modal-title" id="srv-modal-title">&gt; ADD SERVICE</div>
+    <input type="hidden" id="srv-id" />
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Platform</label>
+        <select id="srv-plat">
+          <option value="Facebook">Facebook</option>
+          <option value="Instagram">Instagram</option>
+          <option value="YouTube">YouTube</option>
+          <option value="TikTok">TikTok</option>
+          <option value="Telegram">Telegram</option>
+          <option value="Twitter">Twitter</option>
+          <option value="Spotify">Spotify</option>
+          <option value="LinkedIn">LinkedIn</option>
+          <option value="Pinterest">Pinterest</option>
+          <option value="Snapchat">Snapchat</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Service Type</label>
+        <select id="srv-type-preset" onchange="applySrvPreset()">
+          <option value="">— choose or type below —</option>
+          <option value="Followers">Followers</option>
+          <option value="Likes">Likes</option>
+          <option value="Views">Views</option>
+          <option value="Comments">Comments</option>
+          <option value="Shares">Shares</option>
+          <option value="Reactions">Reactions</option>
+          <option value="Subscribers">Subscribers</option>
+          <option value="Members">Members</option>
+          <option value="Watch Time">Watch Time (hours)</option>
+          <option value="Post Views">Post Views</option>
+          <option value="Reel Views">Reel Views</option>
+          <option value="Story Views">Story Views</option>
+          <option value="Live Views">Live Stream Views</option>
+          <option value="Saves">Saves</option>
+          <option value="Profile Visits">Profile Visits</option>
+          <option value="Custom">Custom (লিখো নিচে)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Service Name (full — client দেখবে)</label>
+      <input type="text" id="srv-name" placeholder="e.g. Facebook Page Followers — Real & Fast" />
+    </div>
+    <div class="form-group">
+      <label>Description (optional)</label>
+      <input type="text" id="srv-desc" placeholder="e.g. High quality, no drop guarantee, 30 day refill" />
+    </div>
+    <div class="grid-2">
+      <div class="form-group"><label>Min Quantity</label><input type="number" id="srv-min" value="100" min="1" /></div>
+      <div class="form-group"><label>Max Quantity</label><input type="number" id="srv-max" value="100000" /></div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Your Selling Price (৳ per 1000)</label>
+        <input type="number" id="srv-price" placeholder="e.g. 90" step="0.01" min="0.01" />
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Client এই price দেখবে ও charge হবে</div>
+      </div>
+      <div class="form-group">
+        <label>smmfollowom Service ID</label>
+        <input type="text" id="srv-smm-id" placeholder="e.g. 1234" />
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Provider panel থেকে service ID নাও</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Status</label>
+      <select id="srv-active">
+        <option value="1">Active — clients দেখতে পাবে</option>
+        <option value="0">Inactive — hidden from clients</option>
+      </select>
+    </div>
+    <div id="srv-msg"></div>
+    <button class="btn btn-neon btn-full" onclick="saveSrv()">Save Service →</button>
+  </div>
+</div>
+
+<!-- ── BALANCE ADJUST MODAL ── -->
+<div class="modal-bg" id="bal-modal">
+  <div class="modal-box" style="max-width:400px;">
+    <button class="modal-close-btn" onclick="document.getElementById('bal-modal').classList.remove('open')">×</button>
+    <div class="modal-title">&gt; ADJUST BALANCE</div>
+    <div id="bal-user-info" style="font-size:13px;color:var(--muted);margin-bottom:16px;padding:10px;background:var(--darker);border:1px solid var(--border);"></div>
+    <div class="form-group"><label>Amount (+ add / − deduct)</label><input type="number" id="bal-amount" placeholder="e.g. 200 or -50" /></div>
+    <div class="form-group"><label>Note</label><input type="text" id="bal-note" placeholder="Reason for adjustment" /></div>
+    <div id="bal-msg"></div>
+    <button class="btn btn-neon btn-full" onclick="doAdjustBal()">Apply Change →</button>
+  </div>
+</div>
+
+<script src="../js/config.js"></script>
+<script>
+// ── STATE ────────────────────────────────────────────────
+let adminToken = localStorage.getItem('vcc_admin_token') || '';
+let adminUsername = localStorage.getItem('vcc_admin_user') || '';
+let allServices = [];
+let currentPlatFilter = 'all';
+let currentBalUid = null;
+const PC = {Facebook:'fb',Instagram:'ig',YouTube:'yt',TikTok:'tk',Telegram:'tg',Twitter:'tw'};
+
+// ── AUTH ─────────────────────────────────────────────────
+function adminLogin() {
+  const user = document.getElementById('admin-user').value.trim();
+  const pass = document.getElementById('admin-pass').value.trim();
+  if (!user || !pass) {
+    document.getElementById('login-err').innerHTML = '<div class="alert alert-error">Username ও Password দুটোই দাও।</div>';
+    return;
+  }
+  // username:password একসাথে পাঠাই — backend এ ADMIN_USERNAME:ADMIN_SECRET চেক হবে
+  adminToken = pass;
+  adminUsername = user;
+  localStorage.setItem('vcc_admin_token', pass);
+  localStorage.setItem('vcc_admin_user', user);
+  verifyAdmin();
+}
+function adminLogout() {
+  adminToken = '';
+  localStorage.removeItem('vcc_admin_token');
+  localStorage.removeItem('vcc_admin_user');
+  document.getElementById('admin-panel').style.display = 'none';
+  document.getElementById('admin-sidebar').style.display = 'none';
+  document.getElementById('admin-login').style.display = 'block';
+  document.getElementById('admin-pass').value = '';
+  document.body.classList.add('not-logged-in');
+}
+async function verifyAdmin() {
+  try {
+    await aApi('/admin/api/dashboard');
+    document.getElementById('admin-login').style.display = 'none';
+    document.getElementById('admin-sidebar').style.display = 'flex';
+    document.getElementById('admin-panel').style.display = 'block';
+    document.body.classList.remove('not-logged-in');
+    loadDashboard();
+  } catch(e) {
+    document.getElementById('login-err').innerHTML = '<div class="alert alert-error">Wrong password.</div>';
+    adminToken = '';
+    localStorage.removeItem('vcc_admin_token');
+  }
+}
+
+// ── API HELPER ───────────────────────────────────────────
+async function aApi(ep, method='GET', body=null) {
+  const headers = { 'Content-Type':'application/json', 'Authorization': 'Bearer ' + adminToken, 'X-Admin-User': adminUsername };
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(VCC_CONFIG.API_BASE + ep, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+// ── TAB NAVIGATION ───────────────────────────────────────
+const tabLoaders = { dashboard:loadDashboard, deposits:loadDeposits, users:loadUsers, orders:loadOrders, services:loadServices, settings:loadSettings };
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.s-nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (tabLoaders[name]) tabLoaders[name]();
+}
+
+// ── DASHBOARD ────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const d = await aApi('/admin/api/dashboard');
+    document.getElementById('s-users').textContent     = d.total_users;
+    document.getElementById('s-orders').textContent    = d.total_orders;
+    document.getElementById('s-pending-o').textContent = d.pending_orders;
+    document.getElementById('s-revenue').textContent   = '৳' + Math.round(d.total_revenue);
+    document.getElementById('s-pending-d').textContent = d.pending_deposits;
+    if (d.pending_deposits > 0) document.getElementById('dep-badge').textContent = `(${d.pending_deposits})`;
+
+    const rows = (d.recent_orders || []).slice(0,10);
+    document.getElementById('dash-orders').innerHTML = rows.length
+      ? `<div style="overflow-x:auto"><table class="vcc-table"><thead><tr>
+          <th>#</th><th>User</th><th>Platform</th><th>Service</th><th>Qty</th><th>Charge</th><th>Status</th><th>Date</th>
+         </tr></thead><tbody>${rows.map(o=>`<tr>
+          <td class="mono text-muted">${o.id}</td>
+          <td style="font-weight:600">${o.username}</td>
+          <td><span class="badge badge-${PC[o.platform]||'fb'}">${o.platform}</span></td>
+          <td>${o.service_name}</td>
+          <td class="mono">${Number(o.quantity).toLocaleString()}</td>
+          <td class="mono text-neon">৳${parseFloat(o.charge).toFixed(2)}</td>
+          <td><span class="badge badge-${o.status}">${o.status}</span></td>
+          <td class="text-muted" style="font-size:11px">${(o.created_at||'').slice(0,10)}</td>
+         </tr>`).join('')}</tbody></table></div>`
+      : '<div class="text-muted mono" style="font-size:12px;padding:20px">No orders yet.</div>';
+  } catch(e) { console.error(e); }
+}
+
+// ── DEPOSITS ─────────────────────────────────────────────
+async function loadDeposits() {
+  try {
+    const deps = await aApi('/admin/api/deposits');
+    document.getElementById('deposits-wrap').innerHTML = `
+      <div style="overflow-x:auto"><div class="card" style="padding:0;overflow:hidden;">
+        <table class="vcc-table"><thead><tr>
+          <th>#</th><th>User</th><th>Amount</th><th>Method</th><th>TxnID</th><th>Note</th><th>Status</th><th>Date</th><th>Action</th>
+        </tr></thead><tbody>${deps.map(d=>`<tr>
+          <td class="mono text-muted">${d.id}</td>
+          <td style="font-weight:600">${d.username}</td>
+          <td class="mono text-neon">৳${parseFloat(d.amount).toFixed(2)}</td>
+          <td>${d.method||'—'}</td>
+          <td class="mono" style="font-size:11px;color:var(--neon2)">${d.trx_id||'—'}</td>
+          <td style="font-size:11px;color:var(--muted)">${d.note||'—'}</td>
+          <td><span class="badge badge-${d.status}">${d.status}</span></td>
+          <td style="font-size:11px;color:var(--muted)">${(d.created_at||'').slice(0,10)}</td>
+          <td style="display:flex;gap:6px;padding:8px 12px;">
+            ${d.status==='pending'
+              ? `<button class="btn btn-outline btn-sm" onclick="approveDeposit(${d.id})">Approve</button>
+                 <button class="btn btn-danger btn-sm" onclick="rejectDeposit(${d.id})">Reject</button>`
+              : '<span class="text-muted" style="font-size:11px">done</span>'}
+          </td>
+        </tr>`).join('')}</tbody></table>
+      </div></div>`;
+  } catch(e) {}
+}
+async function approveDeposit(id) {
+  if (!confirm('Approve this deposit?')) return;
+  try { await aApi(`/admin/api/deposits/${id}/approve`, 'POST'); toast('Approved!','success'); loadDeposits(); loadDashboard(); }
+  catch(e) { toast(e.message,'error'); }
+}
+async function rejectDeposit(id) {
+  if (!confirm('Reject this deposit?')) return;
+  try { await aApi(`/admin/api/deposits/${id}/reject`, 'POST'); toast('Rejected.','warn'); loadDeposits(); }
+  catch(e) { toast(e.message,'error'); }
+}
+
+// ── USERS ────────────────────────────────────────────────
+async function loadUsers() {
+  try {
+    const users = await aApi('/admin/api/users');
+    document.getElementById('users-wrap').innerHTML = `
+      <div style="overflow-x:auto"><div class="card" style="padding:0;overflow:hidden;">
+        <table class="vcc-table"><thead><tr>
+          <th>#</th><th>Username</th><th>Email</th><th>Balance</th><th>Status</th><th>Joined</th><th>Action</th>
+        </tr></thead><tbody>${users.map(u=>`<tr>
+          <td class="mono text-muted">${u.id}</td>
+          <td style="font-weight:600">${u.username}</td>
+          <td style="font-size:12px;color:var(--muted)">${u.email}</td>
+          <td class="mono text-neon">৳${parseFloat(u.balance).toFixed(2)}</td>
+          <td><span class="badge ${u.is_active?'badge-completed':'badge-cancelled'}">${u.is_active?'active':'banned'}</span></td>
+          <td style="font-size:11px;color:var(--muted)">${(u.created_at||'').slice(0,10)}</td>
+          <td><button class="btn btn-outline btn-sm" onclick="openBalModal(${u.id},'${u.username}',${u.balance})">Adj. Balance</button></td>
+        </tr>`).join('')}</tbody></table>
+      </div></div>`;
+  } catch(e) {}
+}
+function openBalModal(uid, uname, bal) {
+  currentBalUid = uid;
+  document.getElementById('bal-user-info').innerHTML =
+    `User: <strong class="text-neon">${uname}</strong> &nbsp;|&nbsp; Balance: <strong class="text-neon">৳${parseFloat(bal).toFixed(2)}</strong>`;
+  document.getElementById('bal-amount').value = '';
+  document.getElementById('bal-note').value = '';
+  document.getElementById('bal-msg').innerHTML = '';
+  document.getElementById('bal-modal').classList.add('open');
+}
+async function doAdjustBal() {
+  const amount = parseFloat(document.getElementById('bal-amount').value);
+  const note = document.getElementById('bal-note').value.trim() || 'Admin adjustment';
+  if (!amount) { document.getElementById('bal-msg').innerHTML = '<div class="alert alert-error">Amount দাও।</div>'; return; }
+  try {
+    await aApi(`/admin/api/users/${currentBalUid}/balance`, 'POST', { amount, note });
+    toast('Balance updated!','success');
+    document.getElementById('bal-modal').classList.remove('open');
+    loadUsers();
+  } catch(e) { document.getElementById('bal-msg').innerHTML = `<div class="alert alert-error">${e.message}</div>`; }
+}
+
+// ── ORDERS ───────────────────────────────────────────────
+async function loadOrders() {
+  try {
+    const orders = await aApi('/admin/api/orders');
+    document.getElementById('orders-wrap').innerHTML = `
+      <div style="overflow-x:auto"><div class="card" style="padding:0;overflow:hidden;">
+        <table class="vcc-table"><thead><tr>
+          <th>#</th><th>User</th><th>Platform</th><th>Service</th><th>Qty</th><th>Link</th><th>Charge</th><th>Status</th><th>Date</th><th>Update</th>
+        </tr></thead><tbody>${orders.map(o=>`<tr>
+          <td class="mono text-muted">${o.id}</td>
+          <td style="font-weight:600">${o.username}</td>
+          <td><span class="badge badge-${PC[o.platform]||'fb'}">${o.platform}</span></td>
+          <td>${o.service_name}</td>
+          <td class="mono">${Number(o.quantity).toLocaleString()}</td>
+          <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:var(--muted)">
+            <a href="${o.link}" target="_blank" style="color:var(--neon2);text-decoration:none">${o.link.slice(0,28)}…</a>
+          </td>
+          <td class="mono text-neon">৳${parseFloat(o.charge).toFixed(2)}</td>
+          <td><span class="badge badge-${o.status}">${o.status}</span></td>
+          <td style="font-size:11px;color:var(--muted)">${(o.created_at||'').slice(0,10)}</td>
+          <td>
+            <select onchange="updateOrderStatus(${o.id},this.value,this)"
+              style="background:var(--darker);border:1px solid var(--border);color:var(--text);padding:4px 6px;font-family:var(--sans);font-size:11px;cursor:pointer;">
+              <option value="">— update —</option>
+              <option value="pending">Pending</option>
+              <option value="processing">Processing</option>
+              <option value="completed">Completed</option>
+              <option value="partial">Partial</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </td>
+        </tr>`).join('')}</tbody></table>
+      </div></div>`;
+  } catch(e) {}
+}
+async function updateOrderStatus(oid, status, sel) {
+  if (!status) return;
+  try {
+    await aApi(`/admin/api/orders/${oid}/status`, 'PUT', { status });
+    toast(`Order #${oid} → ${status}`,'success');
+    sel.value = '';
+    loadOrders();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── SERVICES ─────────────────────────────────────────────
+async function saveSL(sid, val) {
+  const srv = allServices.find(s => s.id === sid);
+  if (!srv) return;
+  try {
+    await aApi(`/admin/api/services/${sid}`, 'PUT', { ...srv, sl: parseInt(val) || 0 });
+    srv.sl = parseInt(val) || 0;
+    // Re-sort and re-render
+    allServices.sort((a,b) => (a.sl||0)-(b.sl||0) || a.id-b.id);
+    renderServices();
+    toast(`SL updated!`, 'success');
+  } catch(e) { toast('Failed: '+e.message, 'error'); }
+}
+
+async function loadServices() {
+  try {
+    allServices = await aApi('/admin/api/services');
+    // Dynamically build platform filter buttons
+    const platforms = ['all', ...new Set(allServices.map(s => s.platform))];
+    const filterDiv = document.getElementById('plat-filter');
+    filterDiv.innerHTML = platforms.map(p =>
+      `<button class="pf-btn ${p === currentPlatFilter ? 'active' : ''}" onclick="filterPlat('${p}',this)">${p === 'all' ? 'All' : p}</button>`
+    ).join('');
+    renderServices();
+  } catch(e) {}
+}
+
+function filterPlat(plat, btn) {
+  currentPlatFilter = plat;
+  document.querySelectorAll('.pf-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderServices();
+}
+
+function renderServices() {
+  const srvs = currentPlatFilter === 'all'
+    ? allServices
+    : allServices.filter(s => s.platform === currentPlatFilter);
+
+  if (!srvs.length) {
+    document.getElementById('services-wrap').innerHTML =
+      '<div class="text-muted mono" style="font-size:12px;padding:20px">No services found.</div>';
+    return;
+  }
+
+  document.getElementById('services-wrap').innerHTML = `
+    <div style="overflow-x:auto"><div class="card" style="padding:0;overflow:hidden;">
+      <table class="vcc-table">
+        <thead><tr>
+          <th>SL</th><th>ID</th><th>Platform</th><th>Service Name</th><th>Description</th>
+          <th>Min</th><th>Max</th>
+          <th>Price /1K (৳)</th>
+          <th>SMM ID</th><th>Active</th><th>Actions</th>
+        </tr></thead>
+        <tbody>${srvs.map(s => `<tr id="srow-${s.id}">
+          <td><input type="number" style="width:55px;background:transparent;border:1px solid var(--border);color:var(--neon);text-align:center;padding:2px 4px;font-family:var(--mono);font-size:11px" value="${s.sl||0}" onchange="saveSL(${s.id},this.value)" title="SL নম্বর লিখে Enter দাও"/></td>
+          <td class="mono text-muted">${s.id}</td>
+          <td><span class="badge badge-${PC[s.platform]||'fb'}">${s.platform}</span></td>
+          <td style="font-weight:600;min-width:160px">${s.name}</td>
+          <td style="font-size:11px;color:var(--muted);min-width:120px">${s.description||'—'}</td>
+          <td class="mono" style="font-size:12px">${s.min_qty}</td>
+          <td class="mono" style="font-size:12px">${Number(s.max_qty).toLocaleString()}</td>
+          <td>
+            <input class="price-edit" id="price-${s.id}"
+              type="number" value="${parseFloat(s.price_per_1k).toFixed(2)}"
+              step="0.01" min="0.01"
+              onkeydown="if(event.key==='Enter') quickSavePrice(${s.id})" />
+          </td>
+          <td class="mono" style="font-size:11px;color:var(--neon2)">${s.smm_service_id||'—'}</td>
+          <td>
+            <label class="toggle">
+              <input type="checkbox" ${s.is_active?'checked':''} onchange="toggleService(${s.id},this.checked)" />
+              <span class="toggle-slider"></span>
+            </label>
+          </td>
+          <td style="display:flex;gap:6px;padding:8px 12px;">
+            <button class="btn btn-neon btn-sm" onclick="quickSavePrice(${s.id})">Save</button>
+            <button class="btn btn-outline btn-sm" onclick="openEditSrv(${s.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSrv(${s.id})">Del</button>
+          </td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div></div>`;
+}
+
+async function quickSavePrice(sid) {
+  const newPrice = parseFloat(document.getElementById(`price-${sid}`).value);
+  if (!newPrice || newPrice <= 0) { toast('Valid price দাও','error'); return; }
+  const srv = allServices.find(s => s.id === sid);
+  if (!srv) return;
+  try {
+    await aApi(`/admin/api/services/${sid}`, 'PUT', { ...srv, price_per_1k: newPrice });
+    toast(`Service #${sid} price → ৳${newPrice.toFixed(2)}`,'success');
+    // Update local state
+    srv.price_per_1k = newPrice;
+    // Flash green
+    const inp = document.getElementById(`price-${sid}`);
+    if (inp) { inp.style.borderBottomColor='var(--neon)'; setTimeout(()=>inp.style.borderBottomColor='',1500); }
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function toggleService(sid, active) {
+  const srv = allServices.find(s => s.id === sid);
+  if (!srv) return;
+  try {
+    await aApi(`/admin/api/services/${sid}`, 'PUT', { ...srv, is_active: active ? 1 : 0 });
+    srv.is_active = active ? 1 : 0;
+    toast(`Service ${active ? 'activated' : 'deactivated'}`, active ? 'success' : 'warn');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function deleteSrv(sid) {
+  if (!confirm('This service কি delete করবে? Orders গুলো থাকবে।')) return;
+  try {
+    await aApi(`/admin/api/services/${sid}`, 'DELETE');
+    toast('Service removed','warn');
+    loadServices();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── SERVICE MODAL ─────────────────────────────────────────
+const SRV_TYPE_PRESETS = {
+  Followers: { min:100, max:100000 },
+  Likes:     { min:50,  max:200000 },
+  Views:     { min:500, max:1000000 },
+  Comments:  { min:10,  max:10000 },
+  Shares:    { min:50,  max:50000 },
+  Subscribers:{ min:100,max:50000 },
+  Members:   { min:100, max:100000 },
+  Reactions: { min:50,  max:200000 },
+};
+
+function applySrvPreset() {
+  const type = document.getElementById('srv-type-preset').value;
+  if (!type || type === 'Custom') return;
+  const plat = document.getElementById('srv-plat').value;
+  document.getElementById('srv-name').value = `${plat} ${type}`;
+  const pre = SRV_TYPE_PRESETS[type];
+  if (pre) {
+    document.getElementById('srv-min').value = pre.min;
+    document.getElementById('srv-max').value = pre.max;
+  }
+}
+
+function openAddSrv() {
+  document.getElementById('srv-id').value = '';
+  document.getElementById('srv-modal-title').textContent = '> ADD SERVICE';
+  document.getElementById('srv-plat').value = 'Facebook';
+  document.getElementById('srv-type-preset').value = '';
+  document.getElementById('srv-name').value = '';
+  document.getElementById('srv-desc').value = '';
+  document.getElementById('srv-min').value = 100;
+  document.getElementById('srv-max').value = 100000;
+  document.getElementById('srv-price').value = '';
+  document.getElementById('srv-smm-id').value = '';
+  document.getElementById('srv-active').value = '1';
+  document.getElementById('srv-msg').innerHTML = '';
+  document.getElementById('srv-modal').classList.add('open');
+}
+
+function openEditSrv(sid) {
+  const s = allServices.find(x => x.id === sid);
+  if (!s) return;
+  document.getElementById('srv-id').value = s.id;
+  document.getElementById('srv-modal-title').textContent = '> EDIT SERVICE';
+  document.getElementById('srv-plat').value   = s.platform;
+  document.getElementById('srv-name').value   = s.name;
+  document.getElementById('srv-desc').value   = s.description || '';
+  document.getElementById('srv-min').value    = s.min_qty;
+  document.getElementById('srv-max').value    = s.max_qty;
+  document.getElementById('srv-price').value  = parseFloat(s.price_per_1k).toFixed(2);
+  document.getElementById('srv-smm-id').value = s.smm_service_id || '';
+  document.getElementById('srv-active').value = s.is_active;
+  document.getElementById('srv-msg').innerHTML = '';
+  document.getElementById('srv-modal').classList.add('open');
+}
+
+function closeSrvModal() {
+  document.getElementById('srv-modal').classList.remove('open');
+}
+
+async function saveSrv() {
+  const sid   = document.getElementById('srv-id').value;
+  const name  = document.getElementById('srv-name').value.trim();
+  const price = parseFloat(document.getElementById('srv-price').value);
+  const msg   = document.getElementById('srv-msg');
+
+  if (!name)  { msg.innerHTML = '<div class="alert alert-error">Service name দাও।</div>'; return; }
+  if (!price || price <= 0) { msg.innerHTML = '<div class="alert alert-error">Valid price দাও।</div>'; return; }
+
+  const data = {
+    platform:       document.getElementById('srv-plat').value,
+    name,
+    description:    document.getElementById('srv-desc').value,
+    min_qty:        parseInt(document.getElementById('srv-min').value) || 100,
+    max_qty:        parseInt(document.getElementById('srv-max').value) || 100000,
+    price_per_1k:   price,
+    smm_service_id: document.getElementById('srv-smm-id').value.trim(),
+    is_active:      parseInt(document.getElementById('srv-active').value),
+    category:       'general'
+  };
+
+  try {
+    if (sid) await aApi(`/admin/api/services/${sid}`, 'PUT', data);
+    else     await aApi('/admin/api/services', 'POST', data);
+    toast('Service saved!','success');
+    closeSrvModal();
+    loadServices();
+  } catch(e) {
+    msg.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+// ── SETTINGS ─────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const s = await aApi('/admin/api/settings');
+    document.getElementById('cfg-name').value  = s.site_name || '';
+    document.getElementById('cfg-tag').value   = s.site_tagline || '';
+    document.getElementById('cfg-min').value   = s.min_deposit || 50;
+    document.getElementById('cfg-bonus').value = s.signup_bonus || 0;
+    document.getElementById('cfg-bkash').value = s.bkash_number || '';
+    document.getElementById('cfg-nagad').value = s.nagad_number || '';
+    document.getElementById('cfg-apikey').value = '';
+    const st = document.getElementById('cfg-apikey-status');
+    if (s.smm_api_key && s.smm_api_key !== '') {
+      st.textContent = '✓ API key configured: ' + s.smm_api_key;
+      st.style.color = 'var(--neon)';
+    } else {
+      st.textContent = '✗ No API key set yet — paste key above to set';
+      st.style.color = 'var(--red)';
+    }
+  } catch(e) {}
+}
+
+async function saveSettings() {
+  const newKey = document.getElementById('cfg-apikey').value.trim();
+  const data = {
+    site_name:    document.getElementById('cfg-name').value,
+    site_tagline: document.getElementById('cfg-tag').value,
+    min_deposit:  document.getElementById('cfg-min').value,
+    signup_bonus: document.getElementById('cfg-bonus').value,
+    bkash_number: document.getElementById('cfg-bkash').value,
+    nagad_number: document.getElementById('cfg-nagad').value,
+  };
+  if (newKey) data.smm_api_key = newKey;
+  try {
+    await aApi('/admin/api/settings', 'POST', data);
+    document.getElementById('settings-msg').innerHTML = '<div class="alert alert-success">Settings saved!</div>';
+    setTimeout(() => document.getElementById('settings-msg').innerHTML = '', 3000);
+    loadSettings();
+  } catch(e) {
+    document.getElementById('settings-msg').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+// ── ADMIN PASSWORD CHANGE ────────────────────────────────
+async function adminChangePw() {
+  const newPw  = document.getElementById('sec-newpw').value;
+  const confirm = document.getElementById('sec-confirmpw').value;
+  const msg    = document.getElementById('sec-msg');
+  msg.innerHTML = '';
+
+  if (!newPw || !confirm) {
+    msg.innerHTML = '<div class="alert alert-error">দুটো field fill করো।</div>'; return;
+  }
+  if (newPw.length < 6) {
+    msg.innerHTML = '<div class="alert alert-error">কমপক্ষে 6 character হতে হবে।</div>'; return;
+  }
+  if (newPw !== confirm) {
+    msg.innerHTML = '<div class="alert alert-error">Password দুটো match করছে না।</div>'; return;
+  }
+  try {
+    await aApi('/admin/api/change-password', 'POST', { new_password: newPw });
+    msg.innerHTML = '<div class="alert alert-success">Password updated! এখন নতুন password দিয়ে login করো।</div>';
+    document.getElementById('sec-newpw').value = '';
+    document.getElementById('sec-confirmpw').value = '';
+    // Auto logout after 3 seconds
+    setTimeout(() => {
+      adminToken = '';
+      localStorage.removeItem('vcc_admin_token');
+      adminToken = newPw; // set new token immediately
+      localStorage.setItem('vcc_admin_token', newPw);
+      msg.innerHTML = '<div class="alert alert-success">Password updated ✓ — New password টা save করো।</div>';
+    }, 1500);
+  } catch(e) {
+    msg.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+// ── INIT ─────────────────────────────────────────────────
+if (!adminToken) document.body.classList.add('not-logged-in');
+if (adminToken) verifyAdmin();
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const loginBox = document.getElementById('admin-login');
+    if (loginBox.style.display !== 'none') adminLogin();
+  }
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-bg').forEach(m => m.classList.remove('open'));
+  }
+});
+</script>
+</body>
+</html>
